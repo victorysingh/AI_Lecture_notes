@@ -1,5 +1,8 @@
 import streamlit as st
 import requests
+import time
+
+# ---------------- CONFIG ---------------- #
 
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
@@ -7,67 +10,99 @@ st.set_page_config(
     layout="centered"
 )
 
+ASSEMBLY_API_KEY = st.secrets["ASSEMBLY_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
 
 SUMMARY_API = "https://router.huggingface.co/hf-inference/models/t5-small"
 QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-small"
 
-HEADERS = {
-    "Authorization": f"Bearer {HF_TOKEN}"
-}
+# ---------------- SPEECH TO TEXT ---------------- #
 
-# ---------------- FUNCTIONS ---------------- #
+def transcribe_audio(audio_file):
+    headers = {"authorization": ASSEMBLY_API_KEY}
+
+    upload = requests.post(
+        "https://api.assemblyai.com/v2/upload",
+        headers=headers,
+        data=audio_file
+    ).json()
+
+    audio_url = upload["upload_url"]
+
+    transcript = requests.post(
+        "https://api.assemblyai.com/v2/transcript",
+        json={"audio_url": audio_url},
+        headers=headers
+    ).json()
+
+    transcript_id = transcript["id"]
+
+    while True:
+        result = requests.get(
+            f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
+            headers=headers
+        ).json()
+
+        if result["status"] == "completed":
+            return result["text"]
+
+        if result["status"] == "error":
+            return "Transcription failed"
+
+        time.sleep(3)
+
+# ---------------- NLP ---------------- #
 
 def summarize_text(text):
-    response = requests.post(
+    r = requests.post(
         SUMMARY_API,
-        headers=HEADERS,
+        headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": text}
     )
-    return response.json()[0]["generated_text"]
+    return r.json()[0]["generated_text"]
 
 def generate_quiz(text):
     prompt = f"""
-Create 5 multiple choice questions from the following text.
-Each question should have 4 options and mention the correct answer.
+Create 5 multiple choice questions from the text.
+Each question must have 4 options and show the correct answer.
 
 Text:
 {text}
 """
-    response = requests.post(
+    r = requests.post(
         QUIZ_API,
-        headers=HEADERS,
+        headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": prompt}
     )
-    return response.json()[0]["generated_text"]
+    return r.json()[0]["generated_text"]
 
 # ---------------- UI ---------------- #
 
 st.title("🎧 AI Lecture Notes Generator")
-st.markdown("### Convert lecture content into notes & quizzes using AI")
+st.markdown("Convert lecture audio into notes and quizzes using AI")
 
-st.divider()
-
-lecture_text = st.text_area(
-    "📘 Paste your lecture content here:",
-    height=250,
-    placeholder="Paste lecture text here..."
-)
+audio_file = st.file_uploader("Upload Lecture Audio", type=["wav", "mp3"])
 
 if st.button("Generate Notes"):
-    if not lecture_text.strip():
-        st.error("Please enter lecture text")
+    if not audio_file:
+        st.error("Please upload an audio file")
     else:
-        with st.spinner("🧠 Generating summary..."):
-            summary = summarize_text(lecture_text)
+        with st.spinner("🎧 Transcribing audio..."):
+            transcript = transcribe_audio(audio_file.read())
 
-        st.subheader("📘 AI Generated Notes")
+        st.subheader("📝 Transcript")
+        st.write(transcript)
+
+        with st.spinner("📘 Generating Summary..."):
+            summary = summarize_text(transcript)
+
+        st.subheader("📘 Summary")
         st.success(summary)
 
-        with st.spinner("🧩 Generating quiz..."):
+        with st.spinner("🧠 Generating Quiz..."):
             quiz = generate_quiz(summary)
 
         st.subheader("🧠 Quiz")
         st.write(quiz)
 
-        st.success("✅ Successfully Generated")
+        st.success("✅ Completed Successfully")
