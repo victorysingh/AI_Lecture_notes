@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import time
-from openai import OpenAI
 
 # ---------------- CONFIG ---------------- #
 
@@ -14,39 +13,30 @@ st.set_page_config(
 ASSEMBLY_API_KEY = st.secrets["ASSEMBLY_API_KEY"]
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
-client = OpenAI(api_key=OPENAI_API_KEY)
-
 # ---------------- SPEECH TO TEXT ---------------- #
 
 def transcribe_audio(audio_bytes):
     headers = {
-        "Authorization": ASSEMBLY_API_KEY,
-        "Content-Type": "application/json"
+        "Authorization": ASSEMBLY_API_KEY
     }
 
-    # Upload
-    upload_res = requests.post(
+    upload = requests.post(
         "https://api.assemblyai.com/v2/upload",
-        headers={"Authorization": ASSEMBLY_API_KEY},
+        headers=headers,
         data=audio_bytes
-    )
+    ).json()
 
-    if upload_res.status_code != 200:
-        return "❌ Audio upload failed"
+    audio_url = upload["upload_url"]
 
-    audio_url = upload_res.json()["upload_url"]
-
-    # Start transcription
-    transcript_res = requests.post(
+    transcript = requests.post(
         "https://api.assemblyai.com/v2/transcript",
         headers=headers,
         json={"audio_url": audio_url}
-    )
+    ).json()
 
-    transcript_id = transcript_res.json()["id"]
+    transcript_id = transcript["id"]
 
-    # Polling
-    for _ in range(30):  # max ~90 seconds
+    while True:
         result = requests.get(
             f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
             headers=headers
@@ -56,36 +46,33 @@ def transcribe_audio(audio_bytes):
             return result["text"]
 
         if result["status"] == "error":
-            return "❌ Transcription failed"
+            return "❌ Transcription failed."
 
         time.sleep(3)
 
-    return "❌ Transcription timeout"
+# ---------------- OPENAI (NO SDK) ---------------- #
 
+def call_openai(prompt):
+    headers = {
+        "Authorization": f"Bearer {OPENAI_API_KEY}",
+        "Content-Type": "application/json"
+    }
 
-# ---------------- OPENAI ---------------- #
-
-def summarize_text(text):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Summarize the lecture clearly for students."},
-            {"role": "user", "content": text}
+    body = {
+        "model": "gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": "You are an educational assistant."},
+            {"role": "user", "content": prompt}
         ]
+    }
+
+    response = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers=headers,
+        json=body
     )
-    return response.choices[0].message.content
 
-
-def generate_quiz(text):
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "Create 5 MCQs with correct answers."},
-            {"role": "user", "content": text}
-        ]
-    )
-    return response.choices[0].message.content
-
+    return response.json()["choices"][0]["message"]["content"]
 
 # ---------------- UI ---------------- #
 
@@ -105,13 +92,17 @@ if st.button("Generate Notes"):
         st.write(transcript)
 
         with st.spinner("📘 Generating Summary..."):
-            summary = summarize_text(transcript)
+            summary = call_openai(
+                f"Summarize this lecture clearly for students:\n\n{transcript}"
+            )
 
         st.subheader("📘 Summary")
         st.success(summary)
 
         with st.spinner("🧠 Generating Quiz..."):
-            quiz = generate_quiz(summary)
+            quiz = call_openai(
+                f"Create 5 MCQs with answers from this text:\n\n{summary}"
+            )
 
         st.subheader("🧠 Quiz")
         st.write(quiz)
