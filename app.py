@@ -1,7 +1,8 @@
 import streamlit as st
 import requests
 
-# ---------------- CONFIG ---------------- #
+# ================= CONFIG ================= #
+
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
     page_icon="🎧",
@@ -18,13 +19,17 @@ WHISPER_API = "https://router.huggingface.co/hf-inference/models/openai/whisper-
 SUMMARY_API = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn"
 QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-base"
 
-
-# ---------------- FUNCTIONS ---------------- #
+# ================= FUNCTIONS ================= #
 
 def transcribe_audio(audio_bytes):
+    headers = {
+        "Authorization": f"Bearer {HF_TOKEN}",
+        "Content-Type": "audio/wav"
+    }
+
     response = requests.post(
         WHISPER_API,
-        headers=HEADERS,
+        headers=headers,
         data=audio_bytes
     )
 
@@ -33,20 +38,16 @@ def transcribe_audio(audio_bytes):
         st.code(response.text)
         return ""
 
-    try:
-        result = response.json()
-    except:
-        st.error("❌ Whisper response error")
-        st.code(response.text)
-        return ""
-
-    return result.get("text", "")
+    return response.json().get("text", "")
 
 
 def summarize_text(text):
     response = requests.post(
         SUMMARY_API,
-        headers=HEADERS,
+        headers={
+            "Authorization": f"Bearer {HF_TOKEN}",
+            "Content-Type": "application/json"
+        },
         json={"inputs": text}
     )
 
@@ -60,8 +61,8 @@ def summarize_text(text):
 
 def generate_quiz(text):
     prompt = f"""
-Generate 5 multiple choice questions from the following text.
-Each question should have 4 options and indicate the correct answer.
+Generate 5 multiple choice questions.
+Each question should have 4 options and mention the correct answer.
 
 Text:
 {text}
@@ -69,7 +70,10 @@ Text:
 
     response = requests.post(
         QUIZ_API,
-        headers=HEADERS,
+        headers={
+            "Authorization": f"Bearer {HF_TOKEN}",
+            "Content-Type": "application/json"
+        },
         json={"inputs": prompt}
     )
 
@@ -81,18 +85,18 @@ Text:
     return response.json()[0]["generated_text"]
 
 
-# ---------------- UI ---------------- #
+# ================= UI ================= #
 
 st.title("🎧 AI Lecture Notes Generator")
 st.markdown("### Convert lecture audio into notes and quizzes using AI")
 st.divider()
 
-audio_file = st.file_uploader("📤 Upload lecture audio", type=["mp3", "wav"])
+audio_file = st.file_uploader("📤 Upload Lecture Audio (MP3 / WAV)", type=["mp3", "wav"])
 generate_btn = st.button("🚀 Generate Notes")
 
 if generate_btn:
     if not audio_file:
-        st.error("Please upload an audio file")
+        st.error("❌ Please upload an audio file.")
     else:
         audio_bytes = audio_file.read()
 
@@ -106,16 +110,16 @@ if generate_btn:
             with st.spinner("🧠 Generating summary..."):
                 summary = summarize_text(transcript)
 
-            st.subheader("📘 Summary")
+            st.subheader("📘 AI Generated Notes")
             st.success(summary)
 
             with st.spinner("🧩 Generating quiz..."):
                 quiz = generate_quiz(summary)
 
-            st.subheader("🧠 Quiz")
+            st.subheader("🧠 Quiz From Lecture")
             st.write(quiz)
 
-            st.success("✅ Completed Successfully")
+            st.success("✅ Completed Successfully!")
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit & Hugging Face")
