@@ -1,101 +1,96 @@
 import streamlit as st
-import os
-from transformers import pipeline
-@st.cache_resource
-def load_whisper_model():
- return pipeline(
-    "automatic-speech-recognition",
-    model="openai/whisper-small"
-)
-@st.cache_resource 
-def load_summarizer():
-   return pipeline("summarization",model="facebook/bart-large-cnn")
-#title
+import requests
+
+# ---------------- CONFIG ---------------- #
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
     page_icon="🎧",
     layout="centered"
 )
 
+HF_TOKEN = st.secrets["HF_TOKEN"]
+
+HEADERS = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
+
+WHISPER_API = "https://api-inference.huggingface.co/models/openai/whisper-large-v3"
+SUMMARY_API = "https://api-inference.huggingface.co/models/facebook/bart-large-cnn"
+QUIZ_API = "https://api-inference.huggingface.co/models/google/flan-t5-base"
+
+# ---------------- FUNCTIONS ---------------- #
+
+def transcribe_audio(audio_bytes):
+    response = requests.post(
+        WHISPER_API,
+        headers=HEADERS,
+        data=audio_bytes
+    )
+    return response.json()["text"]
+
+
+def summarize_text(text):
+    response = requests.post(
+        SUMMARY_API,
+        headers=HEADERS,
+        json={"inputs": text}
+    )
+    return response.json()[0]["summary_text"]
+
+
+def generate_quiz(text):
+    prompt = f"""
+Generate 5 multiple choice questions from the text below.
+Each question should have 4 options and clearly mention the correct answer.
+
+Text:
+{text}
+"""
+    response = requests.post(
+        QUIZ_API,
+        headers=HEADERS,
+        json={"inputs": prompt}
+    )
+    return response.json()[0]["generated_text"]
+
+
+# ---------------- UI ---------------- #
+
 st.title("🎧 AI Lecture Notes Generator")
-st.markdown("### Convert lecture audio into smart notes and quizzes using AI")
-st.markdown("---")
-
-
+st.markdown("### Convert lecture audio into notes & quizzes using AI")
 st.divider()
 
-#file upload
-audio_file = st.file_uploader(("Upload lecture audio(mp3/WAV)"),
-type=["mp3",'wav']
-)
+audio_file = st.file_uploader("📤 Upload lecture audio (mp3 / wav)", type=["mp3", "wav"])
+difficulty = st.selectbox("📘 Select difficulty level", ["Easy", "Medium", "Hard"])
 
-#Difficulty selector
-difficulty = st.selectbox("Select difficulty level:" ,["Easy","Medium","Hard"])
+generate_btn = st.button("🚀 Generate Notes")
 
-# Action Buttton
-generate_btn = st.button("Generate Notes")
-@st.cache_resource
-def load_quiz_generator():
-   return pipeline("text2text-generation", model="google/flan-t5-base")
 if generate_btn:
 
     if audio_file is None:
-        st.error("❌ Please upload an audio file before generating notes.")
-    
+        st.error("❌ Please upload an audio file.")
     else:
-        # Save file safely
-        with open("temp_audio.wav", "wb") as f:
-            f.write(audio_file.getbuffer())
+        audio_bytes = audio_file.read()
 
-        st.success("✅ Audio uploaded successfully!")
-        
- #load model
-        st.info("🔄 Transcribing audio...")
-        st.success("✅ Audio processed successfully")
-        st.info("🧠 Generating summary and quiz...")
+        with st.spinner("🔄 Transcribing audio..."):
+            transcript = transcribe_audio(audio_bytes)
 
-        whisper_model = load_whisper_model()
- # #transcribe
-         
-        result = whisper_model("temp_audio.wav")
-        transcript = result["text"]
         st.subheader("📝 Transcribed Text")
         st.write(transcript)
-#load summarizer
-        st.info("🧠 Generating summary...")
-        summarizer = load_summarizer()
 
-#adjust summary length based on difficulty 
-        if difficulty == "Easy":
-           max_len = 80
-           min_len = 40
-        elif difficulty == "Medium":
-           max_len = 150
-           min_len =80
-        else:
-           max_len = 250
-           min_len = 120
-        summary = summarizer(
-           transcript,
-           max_length=max_len,
-           min_length=min_len,
-           do_sample=False
-   )  
+        with st.spinner("🧠 Generating summary..."):
+            summary = summarize_text(transcript)
+
         st.subheader("📘 AI Generated Notes")
-        st.write(summary[0]["summary_text"]) 
-    #genrate quiz
-        st.subheader("🧠 Quiz Generated from Lecture")
-        quiz_model=load_quiz_generator()
-        quiz_prompt = f"""
-        Generate 5 multiple choice questions based on the following text.
-        Each question should have 4 options and indicate the correct answer.
+        st.success(summary)
 
-        Text:
-        {summary[0]["summary_text"]}
-        """
+        with st.spinner("🧩 Generating quiz..."):
+            quiz = generate_quiz(summary)
 
-        quiz = quiz_model(quiz_prompt, max_length=512)
+        st.subheader("🧠 Quiz From Lecture")
+        st.write(quiz)
 
-        st.write(quiz[0]["generated_text"]) 
-        st.markdown("---")
-        st.caption("Built with ❤️ using Streamlit and Hugging Face")
+        st.success("✅ Done Successfully!")
+
+st.markdown("---")
+st.caption("Built with ❤️ using Streamlit & Hugging Face API")
