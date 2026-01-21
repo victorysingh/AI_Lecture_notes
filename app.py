@@ -23,20 +23,25 @@ HF_HEADERS = {
 def transcribe_audio(audio_bytes):
     headers = {"authorization": ASSEMBLY_API_KEY}
 
+    # Upload audio
     upload = requests.post(
         "https://api.assemblyai.com/v2/upload",
         headers=headers,
         data=audio_bytes
     ).json()
 
+    audio_url = upload.get("upload_url")
+
+    # Start transcription
     transcript = requests.post(
         "https://api.assemblyai.com/v2/transcript",
         headers=headers,
-        json={"audio_url": upload["upload_url"]}
+        json={"audio_url": audio_url}
     ).json()
 
-    transcript_id = transcript["id"]
+    transcript_id = transcript.get("id")
 
+    # Poll result
     while True:
         result = requests.get(
             f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
@@ -51,57 +56,61 @@ def transcribe_audio(audio_bytes):
 
         time.sleep(3)
 
-# ================= SUMMARIZATION ================= #
+# ================= SUMMARY ================= #
 
 def summarize_text(text):
-    payload = {
-        "inputs": text[:3500]
-    }
+    text = text[:3500]
 
     response = requests.post(
         "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn",
         headers=HF_HEADERS,
-        json=payload
+        json={"inputs": text},
+        timeout=60
     )
 
-    data = response.json()
+    if response.status_code != 200:
+        return "⚠️ Summary generation failed (API busy)."
+
+    try:
+        data = response.json()
+    except:
+        return "⚠️ Summary API returned invalid response."
 
     if isinstance(data, list) and "summary_text" in data[0]:
         return data[0]["summary_text"]
 
-    if "error" in data:
-        return f"❌ HuggingFace Error: {data['error']}"
+    return "⚠️ Summary generation failed."
 
-    return "❌ Summary generation failed"
-
-# ================= QUIZ GENERATION ================= #
+# ================= QUIZ ================= #
 
 def generate_quiz(text):
     prompt = f"""
 Create 5 multiple choice questions from the text below.
-Each question must have 4 options and clearly show the correct answer.
+Each question must have 4 options and mention the correct answer.
 
 Text:
 {text}
 """
 
-    payload = {"inputs": prompt}
-
     response = requests.post(
         "https://router.huggingface.co/hf-inference/models/google/flan-t5-base",
         headers=HF_HEADERS,
-        json=payload
+        json={"inputs": prompt},
+        timeout=60
     )
 
-    data = response.json()
+    if response.status_code != 200:
+        return "⚠️ Quiz generation failed (model busy)."
+
+    try:
+        data = response.json()
+    except:
+        return "⚠️ Quiz API error."
 
     if isinstance(data, list) and "generated_text" in data[0]:
         return data[0]["generated_text"]
 
-    if "error" in data:
-        return f"❌ HuggingFace Error: {data['error']}"
-
-    return "❌ Quiz generation failed"
+    return "⚠️ Quiz generation failed."
 
 # ================= UI ================= #
 
