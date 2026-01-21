@@ -18,31 +18,35 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ---------------- SPEECH TO TEXT ---------------- #
 
-def transcribe_audio(audio_file):
+def transcribe_audio(audio_bytes):
     headers = {
-        "authorization": ASSEMBLY_API_KEY
+        "Authorization": ASSEMBLY_API_KEY,
+        "Content-Type": "application/json"
     }
 
-    # Upload audio
-    upload_response = requests.post(
+    # Upload
+    upload_res = requests.post(
         "https://api.assemblyai.com/v2/upload",
-        headers=headers,
-        data=audio_file
-    ).json()
+        headers={"Authorization": ASSEMBLY_API_KEY},
+        data=audio_bytes
+    )
 
-    audio_url = upload_response["upload_url"]
+    if upload_res.status_code != 200:
+        return "❌ Audio upload failed"
 
-    # Request transcription
-    transcript_response = requests.post(
+    audio_url = upload_res.json()["upload_url"]
+
+    # Start transcription
+    transcript_res = requests.post(
         "https://api.assemblyai.com/v2/transcript",
         headers=headers,
         json={"audio_url": audio_url}
-    ).json()
+    )
 
-    transcript_id = transcript_response["id"]
+    transcript_id = transcript_res.json()["id"]
 
-    # Poll result
-    while True:
+    # Polling
+    for _ in range(30):  # max ~90 seconds
         result = requests.get(
             f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
             headers=headers
@@ -52,17 +56,20 @@ def transcribe_audio(audio_file):
             return result["text"]
 
         if result["status"] == "error":
-            return "❌ Transcription failed."
+            return "❌ Transcription failed"
 
         time.sleep(3)
 
-# ---------------- OPENAI FUNCTIONS ---------------- #
+    return "❌ Transcription timeout"
+
+
+# ---------------- OPENAI ---------------- #
 
 def summarize_text(text):
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "Summarize the lecture clearly in student-friendly language."},
+            {"role": "system", "content": "Summarize the lecture clearly for students."},
             {"role": "user", "content": text}
         ]
     )
@@ -73,7 +80,7 @@ def generate_quiz(text):
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
-            {"role": "system", "content": "Create 5 multiple choice questions with answers."},
+            {"role": "system", "content": "Create 5 MCQs with correct answers."},
             {"role": "user", "content": text}
         ]
     )
@@ -89,7 +96,7 @@ audio_file = st.file_uploader("Upload Lecture Audio", type=["wav", "mp3"])
 
 if st.button("Generate Notes"):
     if not audio_file:
-        st.error("Please upload an audio file.")
+        st.error("Please upload an audio file")
     else:
         with st.spinner("🎧 Transcribing audio..."):
             transcript = transcribe_audio(audio_file.read())
