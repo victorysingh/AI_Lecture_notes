@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import time
+from openai import OpenAI
 
 # ---------------- CONFIG ---------------- #
 
@@ -11,37 +12,36 @@ st.set_page_config(
 )
 
 ASSEMBLY_API_KEY = st.secrets["ASSEMBLY_API_KEY"]
-HF_TOKEN = st.secrets["HF_TOKEN"]
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 
-SUMMARY_API = "https://router.huggingface.co/hf-inference/models/t5-small"
-QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-small"
-
-HEADERS = {
-    "Authorization": f"Bearer {HF_TOKEN}",
-    "Content-Type": "application/json"
-}
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 # ---------------- SPEECH TO TEXT ---------------- #
 
 def transcribe_audio(audio_file):
-    headers = {"authorization": ASSEMBLY_API_KEY}
+    headers = {
+        "authorization": ASSEMBLY_API_KEY
+    }
 
-    upload = requests.post(
+    # Upload audio
+    upload_response = requests.post(
         "https://api.assemblyai.com/v2/upload",
         headers=headers,
         data=audio_file
-    )
+    ).json()
 
-    audio_url = upload.json()["upload_url"]
+    audio_url = upload_response["upload_url"]
 
-    transcript_req = requests.post(
+    # Request transcription
+    transcript_response = requests.post(
         "https://api.assemblyai.com/v2/transcript",
-        json={"audio_url": audio_url},
-        headers=headers
-    )
+        headers=headers,
+        json={"audio_url": audio_url}
+    ).json()
 
-    transcript_id = transcript_req.json()["id"]
+    transcript_id = transcript_response["id"]
 
+    # Poll result
     while True:
         result = requests.get(
             f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
@@ -52,56 +52,33 @@ def transcribe_audio(audio_file):
             return result["text"]
 
         if result["status"] == "error":
-            return "Transcription failed"
+            return "❌ Transcription failed."
 
         time.sleep(3)
 
-# ---------------- NLP ---------------- #
+# ---------------- OPENAI FUNCTIONS ---------------- #
 
 def summarize_text(text):
-    r = requests.post(
-        SUMMARY_API,
-        headers=HEADERS,
-        json={
-            "inputs": text,
-            "options": {"wait_for_model": True}
-        }
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Summarize the lecture clearly in student-friendly language."},
+            {"role": "user", "content": text}
+        ]
     )
-
-    if r.status_code != 200:
-        st.error("Summary API Error")
-        st.code(r.text)
-        return ""
-
-    data = r.json()
-    return data[0]["generated_text"]
+    return response.choices[0].message.content
 
 
 def generate_quiz(text):
-    prompt = f"""
-Create 5 multiple choice questions from the text.
-Each question must have 4 options and clearly indicate the correct answer.
-
-Text:
-{text}
-"""
-
-    r = requests.post(
-        QUIZ_API,
-        headers=HEADERS,
-        json={
-            "inputs": prompt,
-            "options": {"wait_for_model": True}
-        }
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "Create 5 multiple choice questions with answers."},
+            {"role": "user", "content": text}
+        ]
     )
+    return response.choices[0].message.content
 
-    if r.status_code != 200:
-        st.error("Quiz API Error")
-        st.code(r.text)
-        return ""
-
-    data = r.json()
-    return data[0]["generated_text"]
 
 # ---------------- UI ---------------- #
 
@@ -112,7 +89,7 @@ audio_file = st.file_uploader("Upload Lecture Audio", type=["wav", "mp3"])
 
 if st.button("Generate Notes"):
     if not audio_file:
-        st.error("Please upload an audio file")
+        st.error("Please upload an audio file.")
     else:
         with st.spinner("🎧 Transcribing audio..."):
             transcript = transcribe_audio(audio_file.read())
