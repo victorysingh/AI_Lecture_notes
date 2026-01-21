@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import time
 
 # ---------------- CONFIG ---------------- #
 st.set_page_config(
@@ -26,7 +27,25 @@ def transcribe_audio(audio_bytes):
         headers=HEADERS,
         data=audio_bytes
     )
-    return response.json()["text"]
+
+    if response.status_code != 200:
+        st.error("❌ Error while transcribing audio.")
+        st.write(response.text)
+        return ""
+
+    try:
+        result = response.json()
+    except Exception:
+        st.error("❌ Failed to decode Whisper response.")
+        st.write(response.text)
+        return ""
+
+    if "text" not in result:
+        st.error("❌ Whisper model is still loading. Please try again in a few seconds.")
+        st.write(result)
+        return ""
+
+    return result["text"]
 
 
 def summarize_text(text):
@@ -35,32 +54,66 @@ def summarize_text(text):
         headers=HEADERS,
         json={"inputs": text}
     )
-    return response.json()[0]["summary_text"]
+
+    if response.status_code != 200:
+        st.error("❌ Error generating summary.")
+        st.write(response.text)
+        return ""
+
+    try:
+        result = response.json()
+    except Exception:
+        st.error("❌ Invalid response from summarization model.")
+        st.write(response.text)
+        return ""
+
+    if not isinstance(result, list):
+        st.error("❌ Summary model is loading. Try again.")
+        return ""
+
+    return result[0]["summary_text"]
 
 
 def generate_quiz(text):
     prompt = f"""
-Generate 5 multiple choice questions from the text below.
+Generate 5 multiple choice questions from the following text.
 Each question should have 4 options and clearly mention the correct answer.
 
 Text:
 {text}
 """
+
     response = requests.post(
         QUIZ_API,
         headers=HEADERS,
         json={"inputs": prompt}
     )
-    return response.json()[0]["generated_text"]
 
+    if response.status_code != 200:
+        st.error("❌ Error generating quiz.")
+        st.write(response.text)
+        return ""
+
+    try:
+        result = response.json()
+    except Exception:
+        st.error("❌ Invalid quiz response.")
+        st.write(response.text)
+        return ""
+
+    if not isinstance(result, list):
+        st.error("❌ Quiz model is still loading.")
+        return ""
+
+    return result[0]["generated_text"]
 
 # ---------------- UI ---------------- #
 
 st.title("🎧 AI Lecture Notes Generator")
-st.markdown("### Convert lecture audio into notes & quizzes using AI")
+st.markdown("### Convert lecture audio into notes and quizzes using AI")
 st.divider()
 
-audio_file = st.file_uploader("📤 Upload lecture audio (mp3 / wav)", type=["mp3", "wav"])
+audio_file = st.file_uploader("📤 Upload lecture audio (MP3 / WAV)", type=["mp3", "wav"])
 difficulty = st.selectbox("📘 Select difficulty level", ["Easy", "Medium", "Hard"])
 
 generate_btn = st.button("🚀 Generate Notes")
@@ -75,22 +128,25 @@ if generate_btn:
         with st.spinner("🔄 Transcribing audio..."):
             transcript = transcribe_audio(audio_bytes)
 
-        st.subheader("📝 Transcribed Text")
-        st.write(transcript)
+        if transcript:
+            st.subheader("📝 Transcribed Text")
+            st.write(transcript)
 
-        with st.spinner("🧠 Generating summary..."):
-            summary = summarize_text(transcript)
+            with st.spinner("🧠 Generating summary..."):
+                summary = summarize_text(transcript)
 
-        st.subheader("📘 AI Generated Notes")
-        st.success(summary)
+            if summary:
+                st.subheader("📘 AI Generated Notes")
+                st.success(summary)
 
-        with st.spinner("🧩 Generating quiz..."):
-            quiz = generate_quiz(summary)
+                with st.spinner("🧩 Generating quiz..."):
+                    quiz = generate_quiz(summary)
 
-        st.subheader("🧠 Quiz From Lecture")
-        st.write(quiz)
+                if quiz:
+                    st.subheader("🧠 Quiz From Lecture")
+                    st.write(quiz)
 
-        st.success("✅ Done Successfully!")
+                    st.success("✅ Process Completed Successfully!")
 
 st.markdown("---")
 st.caption("Built with ❤️ using Streamlit & Hugging Face API")
