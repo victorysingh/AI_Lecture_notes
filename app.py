@@ -56,7 +56,7 @@ def transcribe_audio(audio_bytes):
 # ---------------- SUMMARIZATION ---------------- #
 
 def summarize_text(text):
-    text = text[:3500]  # Important for HF limit
+    text = text[:3500]  # prevent HF overflow
 
     response = requests.post(
         "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
@@ -67,13 +67,25 @@ def summarize_text(text):
     )
 
     data = response.json()
-    return data[0].get("summary_text", "Summary failed.")
+
+    # ✅ Handle all HF response formats safely
+    if isinstance(data, list) and "summary_text" in data[0]:
+        return data[0]["summary_text"]
+
+    if isinstance(data, dict) and "generated_text" in data:
+        return data["generated_text"]
+
+    if isinstance(data, dict) and "error" in data:
+        return f"❌ HuggingFace Error: {data['error']}"
+
+    return "❌ Summary failed (unexpected response)"
+
 
 # ---------------- QUIZ GENERATION ---------------- #
 
 def generate_quiz(text):
     prompt = f"""
-Generate 5 multiple choice questions with answers based on the text below:
+Generate 5 multiple choice questions with answers from the text below:
 
 {text}
 """
@@ -87,7 +99,15 @@ Generate 5 multiple choice questions with answers based on the text below:
     )
 
     data = response.json()
-    return data[0].get("generated_text", "Quiz generation failed.")
+
+    if isinstance(data, list) and "generated_text" in data[0]:
+        return data[0]["generated_text"]
+
+    if isinstance(data, dict) and "error" in data:
+        return f"❌ HuggingFace Error: {data['error']}"
+
+    return "❌ Quiz generation failed"
+
 
 # ---------------- UI ---------------- #
 
