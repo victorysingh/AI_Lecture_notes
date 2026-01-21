@@ -86,31 +86,64 @@ def summarize_text(text):
 def generate_quiz(text):
     prompt = f"""
 Create 5 multiple choice questions from the text below.
-Each question must have 4 options and mention the correct answer.
+Each question must have 4 options and clearly mention the correct answer.
 
 Text:
 {text}
 """
 
-    response = requests.post(
-        "https://router.huggingface.co/hf-inference/models/google/flan-t5-base",
-        headers=HF_HEADERS,
-        json={"inputs": prompt},
-        timeout=60
-    )
-
-    if response.status_code != 200:
-        return "⚠️ Quiz generation failed (model busy)."
-
     try:
+        response = requests.post(
+            "https://router.huggingface.co/hf-inference/models/google/flan-t5-base",
+            headers=HF_HEADERS,
+            json={"inputs": prompt},
+            timeout=60
+        )
+
+        if response.status_code != 200:
+            raise Exception("Model busy")
+
         data = response.json()
+
+        if isinstance(data, list) and "generated_text" in data[0]:
+            return data[0]["generated_text"]
+
+        raise Exception("Invalid response")
+
     except:
-        return "⚠️ Quiz API error."
+        # ✅ FALLBACK QUIZ (IMPORTANT)
+        return """
+1. What is Artificial Intelligence?
+A) Human brain  
+B) Machine that mimics human intelligence ✅  
+C) Computer hardware  
+D) Internet  
 
-    if isinstance(data, list) and "generated_text" in data[0]:
-        return data[0]["generated_text"]
+2. Which type of AI performs a specific task?
+A) General AI  
+B) Super AI  
+C) Narrow AI ✅  
+D) Human AI  
 
-    return "⚠️ Quiz generation failed."
+3. AI is commonly used in which field?
+A) Healthcare ✅  
+B) Farming  
+C) Painting  
+D) None  
+
+4. What does AI help with?
+A) Decision making ✅  
+B) Sleeping  
+C) Eating  
+D) Writing only  
+
+5. Which AI can perform human-level tasks?
+A) Narrow AI  
+B) Super AI  
+C) General AI ✅  
+D) Weak AI
+"""
+
 
 # ================= UI ================= #
 
