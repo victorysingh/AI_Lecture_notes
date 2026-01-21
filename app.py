@@ -1,8 +1,7 @@
 import streamlit as st
 import requests
 
-# ================= CONFIG ================= #
-
+# ---------------- CONFIG ---------------- #
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
     page_icon="🎧",
@@ -15,11 +14,12 @@ HEADERS = {
     "Authorization": f"Bearer {HF_TOKEN}"
 }
 
-WHISPER_API = "https://router.huggingface.co/hf-inference/models/openai/whisper-large-v3"
-SUMMARY_API = "https://router.huggingface.co/hf-inference/models/facebook/bart-large-cnn"
-QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-base"
+WHISPER_API = "https://router.huggingface.co/hf-inference/models/openai/whisper-small"
+SUMMARY_API = "https://router.huggingface.co/hf-inference/models/t5-small"
+QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-small"
 
-# ================= FUNCTIONS ================= #
+
+# ---------------- FUNCTIONS ---------------- #
 
 def transcribe_audio(audio_bytes):
     headers = {
@@ -27,99 +27,85 @@ def transcribe_audio(audio_bytes):
         "Content-Type": "audio/wav"
     }
 
-    response = requests.post(
-        WHISPER_API,
-        headers=headers,
-        data=audio_bytes
-    )
-
-    if response.status_code != 200:
-        st.error("❌ Whisper API Error")
-        st.code(response.text)
+    r = requests.post(WHISPER_API, headers=headers, data=audio_bytes)
+    if r.status_code != 200:
+        st.error("Whisper Error")
+        st.code(r.text)
         return ""
 
-    return response.json().get("text", "")
+    return r.json().get("text", "")
 
 
 def summarize_text(text):
-    response = requests.post(
+    r = requests.post(
         SUMMARY_API,
-        headers={
-            "Authorization": f"Bearer {HF_TOKEN}",
-            "Content-Type": "application/json"
-        },
+        headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": text}
     )
 
-    if response.status_code != 200:
-        st.error("❌ Summary API Error")
-        st.code(response.text)
+    if r.status_code != 200:
+        st.error("Summary Error")
+        st.code(r.text)
         return ""
 
-    return response.json()[0]["summary_text"]
+    return r.json()[0]["generated_text"]
 
 
 def generate_quiz(text):
     prompt = f"""
-Generate 5 multiple choice questions.
-Each question should have 4 options and mention the correct answer.
+Create 5 MCQs from the text.
+Each question must have 4 options and show the correct answer.
 
 Text:
 {text}
 """
 
-    response = requests.post(
+    r = requests.post(
         QUIZ_API,
-        headers={
-            "Authorization": f"Bearer {HF_TOKEN}",
-            "Content-Type": "application/json"
-        },
+        headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": prompt}
     )
 
-    if response.status_code != 200:
-        st.error("❌ Quiz API Error")
-        st.code(response.text)
+    if r.status_code != 200:
+        st.error("Quiz Error")
+        st.code(r.text)
         return ""
 
-    return response.json()[0]["generated_text"]
+    return r.json()[0]["generated_text"]
 
 
-# ================= UI ================= #
+# ---------------- UI ---------------- #
 
 st.title("🎧 AI Lecture Notes Generator")
-st.markdown("### Convert lecture audio into notes and quizzes using AI")
+st.markdown("Convert lecture audio into notes and quizzes using AI")
 st.divider()
 
-audio_file = st.file_uploader("📤 Upload Lecture Audio (MP3 / WAV)", type=["mp3", "wav"])
-generate_btn = st.button("🚀 Generate Notes")
+audio_file = st.file_uploader("Upload Lecture Audio", type=["wav", "mp3"])
+generate_btn = st.button("Generate Notes")
 
 if generate_btn:
     if not audio_file:
-        st.error("❌ Please upload an audio file.")
+        st.error("Please upload audio")
     else:
         audio_bytes = audio_file.read()
 
-        with st.spinner("🔄 Transcribing audio..."):
+        with st.spinner("🎧 Transcribing..."):
             transcript = transcribe_audio(audio_bytes)
 
         if transcript:
-            st.subheader("📝 Transcribed Text")
+            st.subheader("📝 Transcript")
             st.write(transcript)
 
-            with st.spinner("🧠 Generating summary..."):
+            with st.spinner("📘 Summarizing..."):
                 summary = summarize_text(transcript)
 
-            st.subheader("📘 AI Generated Notes")
+            st.subheader("📘 Summary")
             st.success(summary)
 
-            with st.spinner("🧩 Generating quiz..."):
+            with st.spinner("🧠 Generating Quiz..."):
                 quiz = generate_quiz(summary)
 
-            st.subheader("🧠 Quiz From Lecture")
+            st.subheader("🧠 Quiz")
             st.write(quiz)
 
             st.success("✅ Completed Successfully!")
-
-st.markdown("---")
-st.caption("Built with ❤️ using Streamlit & Hugging Face")
