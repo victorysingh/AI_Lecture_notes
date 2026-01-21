@@ -2,6 +2,8 @@ import streamlit as st
 import requests
 import time
 
+# ---------------- CONFIG ---------------- #
+
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
     page_icon="🎧",
@@ -9,13 +11,16 @@ st.set_page_config(
 )
 
 ASSEMBLY_API_KEY = st.secrets["ASSEMBLY_API_KEY"]
-OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+HF_TOKEN = st.secrets["HF_TOKEN"]
 
 # ---------------- SPEECH TO TEXT ---------------- #
 
 def transcribe_audio(audio_bytes):
-    headers = {"Authorization": ASSEMBLY_API_KEY}
+    headers = {
+        "Authorization": ASSEMBLY_API_KEY
+    }
 
+    # Upload audio
     upload = requests.post(
         "https://api.assemblyai.com/v2/upload",
         headers=headers,
@@ -24,6 +29,7 @@ def transcribe_audio(audio_bytes):
 
     audio_url = upload["upload_url"]
 
+    # Request transcription
     transcript = requests.post(
         "https://api.assemblyai.com/v2/transcript",
         headers=headers,
@@ -32,6 +38,7 @@ def transcribe_audio(audio_bytes):
 
     transcript_id = transcript["id"]
 
+    # Poll result
     while True:
         result = requests.get(
             f"https://api.assemblyai.com/v2/transcript/{transcript_id}",
@@ -42,71 +49,73 @@ def transcribe_audio(audio_bytes):
             return result["text"]
 
         if result["status"] == "error":
-            return "Transcription failed"
+            return "❌ Transcription failed."
 
         time.sleep(3)
 
-# ---------------- OPENAI API ---------------- #
+# ---------------- SUMMARIZATION ---------------- #
 
-def call_openai(prompt):
-    headers = {
-        "Authorization": f"Bearer {OPENAI_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    body = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {"role": "system", "content": "You are a helpful AI tutor."},
-            {"role": "user", "content": prompt}
-        ]
-    }
+def summarize_text(text):
+    text = text[:3500]  # Important for HF limit
 
     response = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers=headers,
-        json=body
+        "https://api-inference.huggingface.co/models/facebook/bart-large-cnn",
+        headers={
+            "Authorization": f"Bearer {HF_TOKEN}"
+        },
+        json={"inputs": text}
     )
 
     data = response.json()
+    return data[0].get("summary_text", "Summary failed.")
 
-    # ✅ SAFETY CHECK
-    if "choices" not in data:
-        return f"❌ OpenAI API Error:\n{data.get('error', {}).get('message', 'Unknown error')}"
+# ---------------- QUIZ GENERATION ---------------- #
 
-    return data["choices"][0]["message"]["content"]
+def generate_quiz(text):
+    prompt = f"""
+Generate 5 multiple choice questions with answers based on the text below:
 
+{text}
+"""
+
+    response = requests.post(
+        "https://api-inference.huggingface.co/models/google/flan-t5-base",
+        headers={
+            "Authorization": f"Bearer {HF_TOKEN}"
+        },
+        json={"inputs": prompt}
+    )
+
+    data = response.json()
+    return data[0].get("generated_text", "Quiz generation failed.")
 
 # ---------------- UI ---------------- #
 
 st.title("🎧 AI Lecture Notes Generator")
+st.markdown("Convert lecture audio into notes and quizzes using AI")
 
-audio_file = st.file_uploader("Upload lecture audio", type=["mp3", "wav"])
+audio_file = st.file_uploader("Upload Lecture Audio", type=["mp3", "wav"])
 
 if st.button("Generate Notes"):
     if not audio_file:
-        st.error("Upload an audio file")
+        st.error("Please upload an audio file.")
     else:
-        with st.spinner("🎧 Transcribing..."):
+        with st.spinner("🎧 Transcribing audio..."):
             transcript = transcribe_audio(audio_file.read())
 
         st.subheader("📝 Transcript")
         st.write(transcript)
 
         with st.spinner("📘 Generating summary..."):
-            summary = call_openai(
-                f"Summarize this lecture:\n\n{transcript}"
-            )
+            summary = summarize_text(transcript)
 
         st.subheader("📘 Summary")
         st.success(summary)
 
         with st.spinner("🧠 Generating quiz..."):
-            quiz = call_openai(
-                f"Create 5 MCQs with answers from this:\n\n{summary}"
-            )
+            quiz = generate_quiz(summary)
 
         st.subheader("🧠 Quiz")
         st.write(quiz)
 
-        st.success("✅ Done")
+        st.success("✅ Completed Successfully")
