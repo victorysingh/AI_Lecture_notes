@@ -25,17 +25,20 @@ def transcribe_audio(audio_file):
         "https://api.assemblyai.com/v2/upload",
         headers=headers,
         data=audio_file
-    ).json()
+    )
 
-    audio_url = upload["upload_url"]
+    if upload.status_code != 200:
+        return "Audio upload failed"
 
-    transcript = requests.post(
+    audio_url = upload.json()["upload_url"]
+
+    transcript_req = requests.post(
         "https://api.assemblyai.com/v2/transcript",
         json={"audio_url": audio_url},
         headers=headers
-    ).json()
+    )
 
-    transcript_id = transcript["id"]
+    transcript_id = transcript_req.json()["id"]
 
     while True:
         result = requests.get(
@@ -51,7 +54,7 @@ def transcribe_audio(audio_file):
 
         time.sleep(3)
 
-# ---------------- NLP ---------------- #
+# ---------------- NLP FUNCTIONS ---------------- #
 
 def summarize_text(text):
     r = requests.post(
@@ -59,22 +62,52 @@ def summarize_text(text):
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": text}
     )
-    return r.json()[0]["generated_text"]
+
+    if r.status_code != 200:
+        st.error("Summary API Error")
+        st.code(r.text)
+        return ""
+
+    try:
+        data = r.json()
+    except:
+        st.error("Invalid Summary Response")
+        return ""
+
+    if isinstance(data, list):
+        return data[0].get("generated_text", "")
+    return data.get("generated_text", "")
+
 
 def generate_quiz(text):
     prompt = f"""
 Create 5 multiple choice questions from the text.
-Each question must have 4 options and show the correct answer.
+Each question must have 4 options and clearly indicate the correct answer.
 
 Text:
 {text}
 """
+
     r = requests.post(
         QUIZ_API,
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": prompt}
     )
-    return r.json()[0]["generated_text"]
+
+    if r.status_code != 200:
+        st.error("Quiz API Error")
+        st.code(r.text)
+        return ""
+
+    try:
+        data = r.json()
+    except:
+        st.error("Invalid Quiz Response")
+        return ""
+
+    if isinstance(data, list):
+        return data[0].get("generated_text", "")
+    return data.get("generated_text", "")
 
 # ---------------- UI ---------------- #
 
