@@ -13,8 +13,8 @@ st.set_page_config(
 ASSEMBLY_API_KEY = st.secrets["ASSEMBLY_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
 
-SUMMARY_API = "https://router.huggingface.co/hf-inference/models/t5-small"
-QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-small"
+SUMMARY_API = "https://api-inference.huggingface.co/models/t5-small"
+QUIZ_API = "https://api-inference.huggingface.co/models/google/flan-t5-small"
 
 # ---------------- SPEECH TO TEXT ---------------- #
 
@@ -26,9 +26,6 @@ def transcribe_audio(audio_file):
         headers=headers,
         data=audio_file
     )
-
-    if upload.status_code != 200:
-        return "Audio upload failed"
 
     audio_url = upload.json()["upload_url"]
 
@@ -54,13 +51,13 @@ def transcribe_audio(audio_file):
 
         time.sleep(3)
 
-# ---------------- NLP FUNCTIONS ---------------- #
+# ---------------- NLP ---------------- #
 
 def summarize_text(text):
     r = requests.post(
         SUMMARY_API,
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
-        json={"inputs": text}
+        json={"inputs": text, "options": {"wait_for_model": True}}
     )
 
     if r.status_code != 200:
@@ -68,15 +65,7 @@ def summarize_text(text):
         st.code(r.text)
         return ""
 
-    try:
-        data = r.json()
-    except:
-        st.error("Invalid Summary Response")
-        return ""
-
-    if isinstance(data, list):
-        return data[0].get("generated_text", "")
-    return data.get("generated_text", "")
+    return r.json()[0]["generated_text"]
 
 
 def generate_quiz(text):
@@ -91,7 +80,7 @@ Text:
     r = requests.post(
         QUIZ_API,
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
-        json={"inputs": prompt}
+        json={"inputs": prompt, "options": {"wait_for_model": True}}
     )
 
     if r.status_code != 200:
@@ -99,15 +88,7 @@ Text:
         st.code(r.text)
         return ""
 
-    try:
-        data = r.json()
-    except:
-        st.error("Invalid Quiz Response")
-        return ""
-
-    if isinstance(data, list):
-        return data[0].get("generated_text", "")
-    return data.get("generated_text", "")
+    return r.json()[0]["generated_text"]
 
 # ---------------- UI ---------------- #
 
