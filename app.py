@@ -13,8 +13,13 @@ st.set_page_config(
 ASSEMBLY_API_KEY = st.secrets["ASSEMBLY_API_KEY"]
 HF_TOKEN = st.secrets["HF_TOKEN"]
 
-SUMMARY_API = "https://api-inference.huggingface.co/models/t5-small"
-QUIZ_API = "https://api-inference.huggingface.co/models/google/flan-t5-small"
+SUMMARY_API = "https://router.huggingface.co/hf-inference/models/t5-small"
+QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-small"
+
+HEADERS = {
+    "Authorization": f"Bearer {HF_TOKEN}",
+    "Content-Type": "application/json"
+}
 
 # ---------------- SPEECH TO TEXT ---------------- #
 
@@ -56,8 +61,11 @@ def transcribe_audio(audio_file):
 def summarize_text(text):
     r = requests.post(
         SUMMARY_API,
-        headers={"Authorization": f"Bearer {HF_TOKEN}"},
-        json={"inputs": text, "options": {"wait_for_model": True}}
+        headers=HEADERS,
+        json={
+            "inputs": text,
+            "options": {"wait_for_model": True}
+        }
     )
 
     if r.status_code != 200:
@@ -65,7 +73,8 @@ def summarize_text(text):
         st.code(r.text)
         return ""
 
-    return r.json()[0]["generated_text"]
+    data = r.json()
+    return data[0]["generated_text"]
 
 
 def generate_quiz(text):
@@ -79,8 +88,11 @@ Text:
 
     r = requests.post(
         QUIZ_API,
-        headers={"Authorization": f"Bearer {HF_TOKEN}"},
-        json={"inputs": prompt, "options": {"wait_for_model": True}}
+        headers=HEADERS,
+        json={
+            "inputs": prompt,
+            "options": {"wait_for_model": True}
+        }
     )
 
     if r.status_code != 200:
@@ -88,7 +100,8 @@ Text:
         st.code(r.text)
         return ""
 
-    return r.json()[0]["generated_text"]
+    data = r.json()
+    return data[0]["generated_text"]
 
 # ---------------- UI ---------------- #
 
