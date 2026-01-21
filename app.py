@@ -2,8 +2,6 @@ import streamlit as st
 import requests
 import time
 
-# ---------------- CONFIG ---------------- #
-
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
     page_icon="🎧",
@@ -16,9 +14,7 @@ OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 # ---------------- SPEECH TO TEXT ---------------- #
 
 def transcribe_audio(audio_bytes):
-    headers = {
-        "Authorization": ASSEMBLY_API_KEY
-    }
+    headers = {"Authorization": ASSEMBLY_API_KEY}
 
     upload = requests.post(
         "https://api.assemblyai.com/v2/upload",
@@ -46,11 +42,11 @@ def transcribe_audio(audio_bytes):
             return result["text"]
 
         if result["status"] == "error":
-            return "❌ Transcription failed."
+            return "Transcription failed"
 
         time.sleep(3)
 
-# ---------------- OPENAI (NO SDK) ---------------- #
+# ---------------- OPENAI API ---------------- #
 
 def call_openai(prompt):
     headers = {
@@ -61,7 +57,7 @@ def call_openai(prompt):
     body = {
         "model": "gpt-4o-mini",
         "messages": [
-            {"role": "system", "content": "You are an educational assistant."},
+            {"role": "system", "content": "You are a helpful AI tutor."},
             {"role": "user", "content": prompt}
         ]
     }
@@ -72,39 +68,45 @@ def call_openai(prompt):
         json=body
     )
 
-    return response.json()["choices"][0]["message"]["content"]
+    data = response.json()
+
+    # ✅ SAFETY CHECK
+    if "choices" not in data:
+        return f"❌ OpenAI API Error:\n{data.get('error', {}).get('message', 'Unknown error')}"
+
+    return data["choices"][0]["message"]["content"]
+
 
 # ---------------- UI ---------------- #
 
 st.title("🎧 AI Lecture Notes Generator")
-st.markdown("Convert lecture audio into notes and quizzes using AI")
 
-audio_file = st.file_uploader("Upload Lecture Audio", type=["wav", "mp3"])
+audio_file = st.file_uploader("Upload lecture audio", type=["mp3", "wav"])
 
 if st.button("Generate Notes"):
     if not audio_file:
-        st.error("Please upload an audio file")
+        st.error("Upload an audio file")
     else:
-        with st.spinner("🎧 Transcribing audio..."):
+        with st.spinner("🎧 Transcribing..."):
             transcript = transcribe_audio(audio_file.read())
 
         st.subheader("📝 Transcript")
         st.write(transcript)
 
-        with st.spinner("📘 Generating Summary..."):
+        with st.spinner("📘 Generating summary..."):
             summary = call_openai(
-                f"Summarize this lecture clearly for students:\n\n{transcript}"
+                f"Summarize this lecture:\n\n{transcript}"
             )
 
         st.subheader("📘 Summary")
         st.success(summary)
 
-        with st.spinner("🧠 Generating Quiz..."):
+        with st.spinner("🧠 Generating quiz..."):
             quiz = call_openai(
-                f"Create 5 MCQs with answers from this text:\n\n{summary}"
+                f"Create 5 MCQs with answers from this:\n\n{summary}"
             )
 
         st.subheader("🧠 Quiz")
         st.write(quiz)
 
-        st.success("✅ Completed Successfully")
+        st.success("✅ Done")
