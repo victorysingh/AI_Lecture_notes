@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 
-# ---------------- CONFIG ---------------- #
 st.set_page_config(
     page_title="AI Lecture Notes Generator",
     page_icon="🎧",
@@ -22,56 +21,60 @@ QUIZ_API = "https://router.huggingface.co/hf-inference/models/google/flan-t5-sma
 # ---------------- FUNCTIONS ---------------- #
 
 def transcribe_audio(audio_bytes):
-    headers = {
-        "Authorization": f"Bearer {HF_TOKEN}",
-        "Content-Type": "audio/wav"
+    files = {
+        "file": ("audio.wav", audio_bytes)
     }
 
-    r = requests.post(WHISPER_API, headers=headers, data=audio_bytes)
-    if r.status_code != 200:
-        st.error("Whisper Error")
-        st.code(r.text)
+    response = requests.post(
+        WHISPER_API,
+        headers={"Authorization": f"Bearer {HF_TOKEN}"},
+        files=files
+    )
+
+    if response.status_code != 200:
+        st.error("❌ Whisper Error")
+        st.code(response.text)
         return ""
 
-    return r.json().get("text", "")
+    return response.json().get("text", "")
 
 
 def summarize_text(text):
-    r = requests.post(
+    response = requests.post(
         SUMMARY_API,
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": text}
     )
 
-    if r.status_code != 200:
-        st.error("Summary Error")
-        st.code(r.text)
+    if response.status_code != 200:
+        st.error("❌ Summary Error")
+        st.code(response.text)
         return ""
 
-    return r.json()[0]["generated_text"]
+    return response.json()[0]["generated_text"]
 
 
 def generate_quiz(text):
     prompt = f"""
-Create 5 MCQs from the text.
-Each question must have 4 options and show the correct answer.
+Create 5 multiple choice questions from the text below.
+Each question must have 4 options and clearly mention the correct answer.
 
 Text:
 {text}
 """
 
-    r = requests.post(
+    response = requests.post(
         QUIZ_API,
         headers={"Authorization": f"Bearer {HF_TOKEN}"},
         json={"inputs": prompt}
     )
 
-    if r.status_code != 200:
-        st.error("Quiz Error")
-        st.code(r.text)
+    if response.status_code != 200:
+        st.error("❌ Quiz Error")
+        st.code(response.text)
         return ""
 
-    return r.json()[0]["generated_text"]
+    return response.json()[0]["generated_text"]
 
 
 # ---------------- UI ---------------- #
@@ -80,20 +83,19 @@ st.title("🎧 AI Lecture Notes Generator")
 st.markdown("Convert lecture audio into notes and quizzes using AI")
 st.divider()
 
-audio_file = st.file_uploader("Upload Lecture Audio", type=["wav", "mp3"])
-generate_btn = st.button("Generate Notes")
+audio_file = st.file_uploader("Upload lecture audio", type=["wav", "mp3"])
 
-if generate_btn:
+if st.button("Generate Notes"):
     if not audio_file:
-        st.error("Please upload audio")
+        st.error("Please upload an audio file")
     else:
         audio_bytes = audio_file.read()
 
-        with st.spinner("🎧 Transcribing..."):
+        with st.spinner("🎧 Transcribing audio..."):
             transcript = transcribe_audio(audio_bytes)
 
         if transcript:
-            st.subheader("📝 Transcript")
+            st.subheader("📝 Transcription")
             st.write(transcript)
 
             with st.spinner("📘 Summarizing..."):
@@ -102,10 +104,10 @@ if generate_btn:
             st.subheader("📘 Summary")
             st.success(summary)
 
-            with st.spinner("🧠 Generating Quiz..."):
+            with st.spinner("🧠 Generating quiz..."):
                 quiz = generate_quiz(summary)
 
             st.subheader("🧠 Quiz")
             st.write(quiz)
 
-            st.success("✅ Completed Successfully!")
+            st.success("✅ Done Successfully!")
