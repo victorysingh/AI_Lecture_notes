@@ -1,4 +1,4 @@
-🧠 AI Lecture Notes Generator
+📘 AI Lecture Notes Generator
 📌 Problem Statement
 
 Students often struggle to take proper notes during lectures. Important concepts may be missed, and revising long audio recordings is time-consuming. There is a need for an intelligent system that can automatically convert lecture audio into structured notes and generate quizzes for effective learning.
@@ -9,43 +9,43 @@ This project uses Artificial Intelligence and Natural Language Processing (NLP) 
 
 Convert lecture audio into text
 
-Summarize the lecture into clear notes
+Generate concise, easy-to-understand summaries
 
-Automatically generate quiz questions
+Automatically create quiz questions
 
-Provide an easy-to-use web interface
+Provide a clean and interactive web interface
 
-The system uses Hugging Face Inference APIs, making it lightweight and cloud-deployable without heavy ML installations.
+The system is cloud-based, lightweight, and does not require local ML model installation.
 
 🛠️ Technologies Used
 Technology	Purpose
-Python	Core programming language
-Streamlit	Web application framework
-Hugging Face API	AI model inference
-Whisper	Speech-to-text conversion
-BART	Text summarization
+Python	Core programming
+Streamlit	Web interface
+AssemblyAI API	Speech-to-Text
+Hugging Face API	Text summarization & quiz generation
+BART	Lecture summarization
 FLAN-T5	Quiz generation
 Requests	API communication
 ⚙️ Features
 
-✔ Upload lecture audio (MP3/WAV)
-✔ Convert speech to text
-✔ Generate AI-based summary
-✔ Automatically generate quiz questions
+✔ Upload lecture audio (MP3 / WAV)
+✔ Convert speech to text automatically
+✔ Generate AI-based lecture summary
+✔ Create quiz questions from content
 ✔ Simple and clean UI
 ✔ Works on Streamlit Cloud
-✔ No local ML model installation required
+✔ No heavy ML installation required
 
 🧠 System Architecture
 Audio Input
      ↓
-Speech-to-Text (Whisper API)
+Speech-to-Text (AssemblyAI)
      ↓
 Text Processing
      ↓
-Summarization (BART API)
+Summarization (BART - Hugging Face)
      ↓
-Quiz Generation (FLAN-T5 API)
+Quiz Generation (FLAN-T5)
      ↓
 Streamlit Web Interface
 
@@ -57,29 +57,53 @@ cd AI_Lecture_notes
 🔹 Step 2: Install Dependencies
 pip install streamlit requests
 
-🔹 Step 3: Create Hugging Face Token
+🔹 Step 3: Create API Keys
+✅ AssemblyAI Key
+
+Go to: https://www.assemblyai.com/
+
+Create an account
+
+Copy API key
+
+✅ Hugging Face Token
 
 Go to: https://huggingface.co/settings/tokens
 
-Create a Read Access Token
+Create Read Access Token
 
-Copy the token
+🔹 Step 4: Add Secrets (Streamlit Cloud)
 
-🔹 Step 4: Add Token to Streamlit
+In Streamlit → Manage App → Secrets, add:
 
-In Streamlit Cloud → Manage App → Secrets, add:
-
+ASSEMBLY_API_KEY = "your_assemblyai_key"
 HF_TOKEN = "your_huggingface_token"
 
 🔹 Step 5: Run the App
 streamlit run app.py
 
+📸 Screenshots (Add in PPT / README)
+
+📌 Recommended screenshots:
+
+Home screen
+
+Audio upload screen
+
+Transcript output
+
+Summary output
+
+Quiz generation
+
+(Add these in Results / Output slide)
+
 📈 Future Enhancements
 
 🔹 Download notes as PDF
-🔹 Language translation
-🔹 Topic-wise quiz generation
-🔹 User login system
+🔹 Multi-language support
+🔹 Topic-wise quizzes
+🔹 User authentication
 🔹 Progress tracking
 🔹 Deployment on Hugging Face Spaces
 
